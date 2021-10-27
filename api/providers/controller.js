@@ -66,16 +66,33 @@ async function index(req, res) {
 
 			console.log(url)
 
-			await page.goto(url, {
-				waitUntil: 'networkidle0',
-			});
+			async function retry(promiseFactory, retryCount) {
+				try {
+				  return await promiseFactory();
+				} catch (error) {
+				  if (retryCount <= 0) {
+					throw error;
+				  }
+				  return await retry(promiseFactory, retryCount - 1);
+				}
+			}
+
+			await retry(
+				() => page.goto(url, {
+					waitUntil: 'networkidle0',
+				}),
+				5 // retry this 5 times
+			);
 
 			const pageTitles =  async (pageNumber) => {
 
 				try{
-					await page.goto(url+'page/'+pageNumber, {
-						waitUntil: 'networkidle0',
-					});
+					await retry(
+						() => page.goto(url+'page/'+pageNumber, {
+							waitUntil: 'networkidle0',
+						}),
+						5 // retry this 5 times
+					);
 	
 					let titleSelectors = await page.$$('.frame-title')
 					
@@ -135,7 +152,7 @@ async function index(req, res) {
 					year: year //remove parenthesis from year string
 				}
 			});
-			console.log(resp.data)
+			//console.log(resp.data)
 			let response = resp.data
 			if(response.results && response.results[0]){
 				return response.results[0]
@@ -152,7 +169,7 @@ async function index(req, res) {
 			})
 			//console.log(resp)
 			let response = resp.data
-			if(response.results){
+			if(response.results && response.results[country]){
 				console.log(response.results[country].flatrate)
 				return response.results[country].flatrate
 			}else{
@@ -164,20 +181,30 @@ async function index(req, res) {
 		const films = await scrapLetterboxd()
 		console.log(films)
 
+		let providersObj = JSON.parse(providers)
+		let crossedFilms = []
+
+		providersObj.forEach(element => {
+			crossedFilms.push({ id: element, films: [] })	
+		});
+
 		for (let i = 0; i < films.length; i++) {
 			const element = films[i];
+			console.log(element)
 			const filmData = await getFilmData(element)
-			const filmProviders = await getFilmProviders(filmData.id)
-
-			/* providers.forEach(element => {
-				let selectedProvider = providerData.find(pro => pro.id==element)
-
-				filmProviders.forEach(film => {
-
-				})
-
-			});*/
-			console.log(filmProviders)
+			if(filmData){
+				const filmProviders = await getFilmProviders(filmData.id)
+				console.log(filmData)
+	
+				console.log(filmProviders)
+				if(filmProviders){
+					filmProviders.forEach(provider => {
+						let found = crossedFilms.find(el => el.id == provider.provider_id)
+						found && found.films.push(filmData);
+					})
+				}
+				console.log(crossedFilms)
+			}
 		}
 
 		//getFilmData("fantastic mr fox (2009)")
@@ -185,7 +212,7 @@ async function index(req, res) {
 		//getFilmProviders(10315)
 
 		return res.status(200).send(
-			"success"
+			crossedFilms
 		);
 	} catch (error) {
 		console.error(error);

@@ -22,6 +22,8 @@ router.get('/', function (req, res) {
 
 app.use(router);
 
-app.listen(3000, function () {
+var server = app.listen(3000, function () {
     console.log("Node server running on http://localhost:3000");
 });
+
+server.setTimeout(0)
